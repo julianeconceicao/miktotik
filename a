@@ -1,61 +1,43 @@
-colar nonterminal 
-
-
-/system identity set name="MikroTik-Manager"
-/interface bridge add name=bridge-local protocol-mode=none
-/interface bridge port add bridge=bridge-local interface=ether2
-/interface bridge port add bridge=bridge-local interface=ether3
-/interface bridge port add bridge=bridge-local interface=ether4
-/interface bridge port add bridge=bridge-local interface=wlan1
-/interface wireless set [ find default-name=wlan1 ] mode=ap-bridge band=2ghz-b/g/n ssid="Rede-Cliente" disabled=no
-/interface vlan add name=vlan100 interface=ether1 vlan-id=100
-/interface vlan add name=vlan200 interface=ether1 vlan-id=200
-/interface vlan add name=vlan300 interface=ether1 vlan-id=300
-/interface pppoe-client add name=pppoe-vlan100 interface=vlan100 user="jmnet" password="jmnet" add-default-route=yes default-route-distance=1 disabled=no
-/interface pppoe-client add name=pppoe-vlan200 interface=vlan200 user="jmnet" password="jmnet" add-default-route=no default-route-distance=2 disabled=no
-/interface pppoe-client add name=pppoe-vlan300 interface=vlan300 user="jmnet" password="jmnet" add-default-route=no default-route-distance=3 disabled=no
-/ip address add address=192.168.88.1/24 interface=bridge-local network=192.168.88.0
-/ip pool add name=dhcp_pool ranges=192.168.88.10-192.168.88.254
-/ip dhcp-server add name=dhcp-local interface=bridge-local address-pool=dhcp_pool disabled=no
-/ip dhcp-server network add address=192.168.88.0/24 gateway=192.168.88.1 dns-server=8.8.8.8,1.1.1.1
-/ip firewall nat add chain=srcnat out-interface=pppoe-vlan100 action=masquerade
-/ip firewall nat add chain=srcnat out-interface=pppoe-vlan200 action=masquerade
-/ip firewall nat add chain=srcnat out-interface=pppoe-vlan300 action=masquerade
-/ip service set www port=3000
-
-
-
-------
-/system identity set name="MikroTik-Acesso-Remoto"
-/interface bridge add name=bridge-local protocol-mode=none
-/interface bridge port add bridge=bridge-local interface=ether2
-/interface bridge port add bridge=bridge-local interface=ether3
-/interface bridge port add bridge=bridge-local interface=ether4
-/interface bridge port add bridge=bridge-local interface=wlan1
-/interface wireless set [ find default-name=wlan1 ] mode=ap-bridge band=2ghz-b/g/n ssid="Suporte-Remoto" disabled=no
-/ip dhcp-client add interface=ether1 disabled=no
-/ip address add address=192.168.88.1/24 interface=bridge-local network=192.168.88.0
-/ip pool add name=dhcp_pool ranges=192.168.88.10-192.168.88.254
-/ip dhcp-server add name=dhcp-local interface=bridge-local address-pool=dhcp_pool disabled=no
-/ip dhcp-server network add address=192.168.88.0/24 gateway=192.168.88.1 dns-server=8.8.8.8,1.1.1.1
-/ip firewall nat add chain=srcnat out-interface=ether1 action=masquerade
-/ip service set www port=3000
-/ip service set winbox port=8291
-/ip firewall filter add chain=input connection-state=established,related action=accept comment="Permitir conexoes estabelecidas"
-/ip firewall filter add chain=input protocol=icmp action=accept comment="Permitir Ping"
-
-
-
-
-Atue como um Gerente Sênior de Redes. O cenário real é o seguinte: uma CPE está na casa de um cliente, cadastrada na OLT, mas não está conseguindo autenticar o PPPoE por algum motivo de configuração interna dela. Como a CPE e um roteador MikroTik hAP lite estão no local do cliente, vou conectá-los (com a porta LAN da CPE ligada na ether1 do MikroTik) para que eu possa acessar o MikroTik remotamente de outro local e, através dele, alcançar a interface de gerência da CPE para corrigir a configuração de PPPoE e fazê-la autenticar. 
-
-Preciso que o MikroTik esteja configurado para:
-1. Receber o IP/DHCP da CPE na ether1.
-2. Criar uma rede local (bridge com as portas ether2 a ether4 e Wi-Fi wlan1, com Servidor DHCP distribuindo IPs na faixa 192.168.88.0/24).
-3. Habilitar o NAT (masquerade) na ether1 para garantir conectividade e saída.
-4. Configurar o acesso remoto web (WebFig) na porta 3000 e o WinBox na porta padrão (8291), mantendo regras básicas de filtro de entrada para pacotes estabelecidos e ping.
-
-Me forneça o script completo, limpo e direto, pronto para copiar e colar no terminal do hAP lite para este cenário de acesso remoto à CPE.
-
-
-
+# jan/02/1970 05:12:52 by RouterOS 6.47.1
+# software id = 1RX7-F3W4
+#
+# model = RouterBOARD 941-2nD
+# serial number = 6617072CF441
+/interface bridge
+add name=bridge-local
+/interface wireless security-profiles
+set [ find default=yes ] supplicant-identity=MikroTik
+add authentication-types=wpa2-psk mode=dynamic-keys name=sec-ios-juliane \
+    supplicant-identity=MikroTik wpa2-pre-shared-key=12345678
+/interface wireless
+set [ find default-name=wlan1 ] band=2ghz-b/g/n disabled=no frequency=2437 \
+    security-profile=sec-ios-juliane ssid=" IOS Juliane"
+add disabled=no mac-address=66:D1:54:4D:59:B2 master-interface=wlan1 name=wlan2 \
+    ssid=teste wps-mode=disabled
+/ip pool
+add name=pool-lan ranges=192.168.88.10-192.168.88.250
+add name=pool-ether4 ranges=192.168.89.2
+/ip dhcp-server
+add address-pool=pool-lan disabled=no interface=bridge-local name=dhcp-lan
+/interface bridge port
+add bridge=bridge-local interface=ether2
+add bridge=bridge-local interface=ether3
+add bridge=bridge-local interface=wlan2
+add bridge=bridge-local interface=ether4
+/ip address
+add address=192.168.88.1/24 interface=bridge-local network=192.168.88.0
+add address=192.168.89.1/24 interface=ether4 network=192.168.89.0
+/ip cloud
+set ddns-enabled=yes
+/ip dhcp-client
+add interface=wlan1
+# DHCP client can not run on slave interface!
+add add-default-route=no disabled=no interface=ether4
+add interface=wlan1
+/ip dhcp-server network
+add address=192.168.88.0/24 dns-server=8.8.8.8 gateway=192.168.88.1
+add address=192.168.89.0/24 dns-server=8.8.8.8 gateway=192.168.89.1
+/ip dns
+set allow-remote-requests=yes servers=8.8.8.8,1.1.1.1
+/ip firewall nat
+add action=masquerade chain=srcnat out-interface=wlan1
