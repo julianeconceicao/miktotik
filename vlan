@@ -1,0 +1,38 @@
+# 1. Remove qualquer teste ou configuração anterior na ether4 para evitar conflitos
+/interface vlan remove [find interface="ether4"]
+/ip address remove [find interface="ether4" or comment~="Teste VLAN"]
+
+# 2. Cria interfaces VLAN de teste na porta 4 (ether4)
+/interface vlan add name="vlan-teste-10" vlan-id=10 interface=ether4
+/interface vlan add name="vlan-teste-20" vlan-id=20 interface=ether4
+/interface vlan add name="vlan-teste-100" vlan-id=100 interface=ether4
+
+# 3. Adiciona IPs de gerência na mesma faixa da CPE (192.168.1.x) para cada VLAN
+/ip address add address=192.168.1.251/24 interface="vlan-teste-10" comment="Teste VLAN 10"
+/ip address add address=192.168.1.252/24 interface="vlan-teste-20" comment="Teste VLAN 20"
+/ip address add address=192.168.1.253/24 interface="vlan-teste-100" comment="Teste VLAN 100"
+
+
+# ==========================================
+# 1. LIMPEZA PREVENTIVA
+# ==========================================
+/interface vlan remove [find interface="ether4"]
+/ip address remove [find interface="ether4" or comment~="Gerencia CPE"]
+
+# ==========================================
+# 2. CRIAÇÃO DAS VLANs DE TESTE NA PORTA 4
+# ==========================================
+# Adicionamos as VLANs mais comuns de mercado. Se precisar de outras, basta duplicar alterando o nome e o vlan-id.
+/interface vlan add name="vlan-teste-10" vlan-id=10 interface=ether4
+/interface vlan add name="vlan-teste-20" vlan-id=20 interface=ether4
+/interface vlan add name="vlan-teste-100" vlan-id=100 interface=ether4
+/interface vlan add name="vlan-teste-200" vlan-id=200 interface=ether4
+
+# ==========================================
+# 3. ATRIBUIÇÃO DOS ENDEREÇOS IP DE GERÊNCIA
+# ==========================================
+# O MikroTik assume um IP na mesma faixa da CPE (192.168.1.x) para cada sub-interface criada.
+/ip address add address=192.168.1.251/24 interface="vlan-teste-10" comment="Gerencia CPE - VLAN 10"
+/ip address add address=192.168.1.252/24 interface="vlan-teste-20" comment="Gerencia CPE - VLAN 20"
+/ip address add address=192.168.1.253/24 interface="vlan-teste-100" comment="Gerencia CPE - VLAN 100"
+/ip address add address=192.168.1.254/24 interface="vlan-teste-200" comment="Gerencia CPE - VLAN 200"
