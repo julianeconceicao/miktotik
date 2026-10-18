@@ -1,0 +1,44 @@
+# oct/18/2026 19:05:08 by RouterOS 6.47.1
+# software id = 1RX7-F3W4
+#
+# model = RouterBOARD 941-2nD
+# serial number = 6617072CF441
+/interface bridge
+add name=bridge_local
+/interface wireless
+set [ find default-name=wlan1 ] band=2ghz-b/g/n disabled=no frequency=2437 ssid=" IOS Juliane"
+add disabled=no keepalive-frames=disabled mac-address=02:00:00:00:00:01 master-interface=wlan1 multicast-buffering=disabled name=wlan2 ssid=\
+    "Configurar Roteador" wds-cost-range=0 wds-default-cost=0 wmm-support=enabled
+/interface wireless security-profiles
+set [ find default=yes ] authentication-types=wpa2-psk supplicant-identity=MikroTik wpa2-pre-shared-key=12345678
+/ip pool
+add name=dhcp_pool0 ranges=192.168.88.10-192.168.88.254
+/ip dhcp-server
+add address-pool=dhcp_pool0 disabled=no interface=bridge_local name=dhcp1
+/interface bridge port
+add bridge=bridge_local interface=wlan2
+add bridge=bridge_local interface=ether2
+add bridge=bridge_local interface=ether3
+/ip address
+add address=192.168.88.1/24 interface=bridge_local network=192.168.88.0
+/ip dhcp-client
+add disabled=no interface=wlan1
+add add-default-route=no disabled=no interface=ether4 use-peer-dns=no use-peer-ntp=no
+/ip dhcp-server network
+add address=192.168.88.0/24 dns-server=8.8.8.8,8.8.4.4 gateway=192.168.88.1
+/ip firewall filter
+add action=accept chain=forward comment="Libera Wi-Fi -> ether4" in-interface=bridge_local out-interface=ether4
+add action=accept chain=input comment="Permite Acesso de Gerencia via ether4" in-interface=ether4
+/ip firewall nat
+add action=masquerade chain=srcnat comment="NAT - Acesso ao Roteador ether4" out-interface=ether4
+add action=masquerade chain=srcnat comment="NAT - Compartilha a Internet" out-interface=wlan1
+/ip service
+set telnet disabled=yes
+set ftp disabled=yes
+set ssh disabled=yes
+set api disabled=yes
+set api-ssl disabled=yes
+/system clock
+set time-zone-name=America/Bahia
+/system identity
+set name=CONF-REMOT
