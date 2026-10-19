@@ -1,10 +1,45 @@
-# =================================================================
-# SCRIPT UNIVERSAL / PORTÁVEL PARA ROUTERBOARD MIKROTIK
-# =================================================================
+# Script de Importacao Generica para RouterOS
+# Compativel com v6.x e v7.x
 
-# 1. IDENTIDADE DO EQUIPAMENTO E SEGURANÇA DE SERVIÇOS
-/system identity set name=CONF-REMOT
-/system clock set time-zone-name=America/Bahia
+/interface bridge
+add comment="Bridge LAN Principal" name=bridge_local
+
+/interface wireless security-profiles
+set [ find default=yes ] authentication-types=wpa2-psk mode=dynamic-keys supplicant-identity=MikroTik wpa2-pre-shared-key=12345678
+add authentication-types=wpa2-psk,wpa2-eap group-ciphers=tkip,aes-ccm mode=dynamic-keys name=profile1 supplicant-identity="" unicast-ciphers=tkip,aes-ccm wpa2-pre-shared-key=12345678
+
+/interface wireless
+set [ find default-name=wlan1 ] band=2ghz-b/g/n country=brazil disabled=no frequency=2437 security-profile=profile1 ssid=" IOS Juliane"
+add disabled=no keepalive-frames=disabled master-interface=wlan1 multicast-buffering=disabled name=wlan2 ssid="Configurar Roteador" wds-cost-range=0 wds-default-cost=0 wmm-support=enabled
+
+/ip pool
+add name=dhcp_pool0 ranges=192.168.88.10-192.168.88.254
+
+/ip dhcp-server
+add address-pool=dhcp_pool0 disabled=no interface=bridge_local name=dhcp1
+
+/interface bridge port
+add bridge=bridge_local interface=wlan2
+add bridge=bridge_local interface=ether2
+add bridge=bridge_local interface=ether3
+
+/ip address
+add address=192.168.88.1/24 interface=bridge_local network=192.168.88.0
+
+/ip dhcp-client
+add disabled=no interface=wlan1
+add add-default-route=no disabled=no interface=ether4 use-peer-dns=no use-peer-ntp=no
+
+/ip dhcp-server network
+add address=192.168.88.0/24 dns-server=8.8.8.8,8.8.4.4 gateway=192.168.88.1
+
+/ip firewall filter
+add action=accept chain=forward comment="Libera Wi-Fi -> ether4" in-interface=bridge_local out-interface=ether4
+add action=accept chain=input comment="Permite Acesso de Gerencia via ether4" in-interface=ether4
+
+/ip firewall nat
+add action=masquerade chain=srcnat comment="NAT - Acesso ao Roteador ether4" out-interface=ether4
+add action=masquerade chain=srcnat comment="NAT - Compartilha a Internet" out-interface=wlan1
 
 /ip service
 set telnet disabled=yes
@@ -13,89 +48,8 @@ set ssh disabled=yes
 set api disabled=yes
 set api-ssl disabled=yes
 
-# 2. CRIAÇÃO DA BRIDGE LOCAL
-:if ([:len [/interface bridge find name=bridge_local]] = 0) do={
-    /interface bridge add name=bridge_local
-}
+/system clock
+set time-zone-name=America/Bahia
 
-# 3. REGRAS DE WIRELESS (Executado apenas em RBs que possuem rádio Wi-Fi)
-:if ([:len [/interface wireless find default-name=wlan1]] > 0) do={
-    /interface wireless security-profiles
-    set [ find default=yes ] authentication-types=wpa2-psk mode=dynamic-keys supplicant-identity=MikroTik wpa2-pre-shared-key=12345678
-
-    # Configura a wlan1 como Cliente (Station) do celular
-    /interface wireless
-    set [ find default-name=wlan1 ] band=2ghz-b/g/n disabled=no mode=station security-profile=default ssid="IOS Juliane"
-
-    # Recria o Wi-Fi Virtual (wlan2) para os clientes locais
-    :if ([:len [/interface wireless find name=wlan2]] > 0) do={
-        /interface wireless remove [find name=wlan2]
-    }
-    /interface wireless add disabled=no master-interface=[find default-name=wlan1] mode=ap-bridge name=wlan2 security-profile=default ssid="Configurar Roteador" wmm-support=enabled
-
-    # Associa a wlan2 à Bridge local
-    :if ([:len [/interface bridge port find interface=wlan2]] = 0) do={
-        /interface bridge port add bridge=bridge_local interface=wlan2
-    }
-
-    # DHCP Client na wlan1 para puxar a internet
-    :if ([:len [/ip dhcp-client find interface=[find default-name=wlan1]]] = 0) do={
-        /ip dhcp-client add interface=[find default-name=wlan1] disabled=no add-default-route=yes use-peer-dns=yes
-    } else={
-        /ip dhcp-client set [find interface=[find default-name=wlan1]] add-default-route=yes disabled=no use-peer-dns=yes
-    }
-
-    # NAT de saída para a Internet via Wi-Fi
-    :if ([:len [/ip firewall nat find comment="NAT - Compartilha a Internet"]] = 0) do={
-        /ip firewall nat add action=masquerade chain=srcnat comment="NAT - Compartilha a Internet" out-interface=[find default-name=wlan1]
-    }
-}
-
-# 4. ASSOCIAÇÃO DINÂMICA DE PORTAS CABEADAS (ether2 e ether3)
-:foreach p in={"ether2"; "ether3"} do={
-    :if ([:len [/interface find name=$p]] > 0) do={
-        /interface bridge port remove [find interface=$p]
-        /interface bridge port add bridge=bridge_local interface=$p
-    }
-}
-
-# 5. PORTA ETHER4 ISOLADA PARA GERÊNCIA EXTERNA
-:if ([:len [/interface find name="ether4"]] > 0) do={
-    # Remove da bridge local
-    /interface bridge port remove [find interface="ether4"]
-
-    # Ativa DHCP Client exclusivo de acesso (Sem desviar a rota de internet)
-    :if ([:len [/ip dhcp-client find interface="ether4"]] = 0) do={
-        /ip dhcp-client add interface=ether4 disabled=no add-default-route=no use-peer-dns=no use-peer-ntp=no
-    } else={
-        /ip dhcp-client set [find interface="ether4"] add-default-route=no disabled=no use-peer-dns=no use-peer-ntp=no
-    }
-
-    # NAT e Liberações de Firewall para a ether4
-    :if ([:len [/ip firewall nat find comment="NAT - Acesso ao Roteador ether4"]] = 0) do={
-        /ip firewall nat add action=masquerade chain=srcnat comment="NAT - Acesso ao Roteador ether4" out-interface=ether4 place-before=0
-    }
-    :if ([:len [/ip firewall filter find comment="Libera Wi-Fi -> ether4"]] = 0) do={
-        /ip firewall filter add action=accept chain=forward comment="Libera Wi-Fi -> ether4" in-interface=bridge_local out-interface=ether4 place-before=0
-    }
-    :if ([:len [/ip firewall filter find comment="Permite Acesso de Gerencia via ether4"]] = 0) do={
-        /ip firewall filter add action=accept chain=input comment="Permite Acesso de Gerencia via ether4" in-interface=ether4 place-before=0
-    }
-}
-
-# 6. CONFIGURAÇÃO DE IP E SERVIDOR DHCP DA REDE LOCAL
-:if ([:len [/ip pool find name=dhcp_pool0]] = 0) do={
-    /ip pool add name=dhcp_pool0 ranges=192.168.88.10-192.168.88.254
-}
-
-:if ([:len [/ip address find interface=bridge_local]] = 0) do={
-    /ip address add address=192.168.88.1/24 interface=bridge_local network=192.168.88.0
-}
-
-:if ([:len [/ip dhcp-server network find address="192.168.88.0/24"]] = 0) do={
-    /ip dhcp-server network add address=192.168.88.0/24 dns-server=8.8.8.8,8.8.4.4 gateway=192.168.88.1
-}
-
-:if ([:len [/ip dhcp-server find interface=bridge_local]] = 0) do={
-    /ip dhcp-server add address-pool=dhcp_pool0 disabled=no interface=bridge_local name=dhcp1
-}
+/system identity
+set name=CONF-REMOT
